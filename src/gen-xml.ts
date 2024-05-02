@@ -76,34 +76,28 @@ const ImageSizingXml = {
 		return `<a:srcRect l="${lPerc}" r="${rPerc}" t="${tPerc}" b="${bPerc}"/><a:stretch/>`
 	},
 }
+interface SlideItemObjsToXmlResult {
+	xmlStr: string
+	x: number
+	y: number
+	cx: number
+	cy: number
+}
 
 /**
- * Transforms a slide or slideLayout to resulting XML string - Creates `ppt/slide*.xml`
- * @param {PresSlide|SlideLayout} slideObject - slide object created within createSlideObject
- * @return {string} XML string with <p:cSld> as the root
+ * Transforms a list of slide objects to an XML string and returns the position and size values for their container.
+ * @param {ISlideObject[]} slideItemObjs
+ * @param {PresSlide|SlideLayout} slide
+ * @returns {SlideItemObjsToXmlResult}
  */
-function slideObjectToXml (slide: PresSlide | SlideLayout): string {
-	let strSlideXml: string = slide._name ? '<p:cSld name="' + slide._name + '">' : '<p:cSld>'
+function slideItemObjsToXml (slideItemObjs: ISlideObject[], slide: PresSlide | SlideLayout): SlideItemObjsToXmlResult {
+	let strSlideXml = ''
 	let intTableNum = 1
-
-	// STEP 1: Add background color/image (ensure only a single `<p:bg>` tag is created, ex: when master-baskground has both `color` and `path`)
-	if (slide._bkgdImgRid) {
-		strSlideXml += `<p:bg><p:bgPr><a:blipFill dpi="0" rotWithShape="1"><a:blip r:embed="rId${slide._bkgdImgRid}"><a:lum/></a:blip><a:srcRect/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>`
-	} else if (slide.background?.color) {
-		strSlideXml += `<p:bg><p:bgPr>${genXmlColorSelection(slide.background)}</p:bgPr></p:bg>`
-	} else if (!slide.bkgd && slide._name && slide._name === DEF_PRES_LAYOUT_NAME) {
-		// NOTE: Default [white] background is needed on slideMaster1.xml to avoid gray background in Keynote (and Finder previews)
-		strSlideXml += '<p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>'
-	}
-
-	// STEP 2: Continue slide by starting spTree node
-	strSlideXml += '<p:spTree>'
-	strSlideXml += '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>'
-	strSlideXml += '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>'
-	strSlideXml += '<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>'
-
-	// STEP 3: Loop over all Slide.data objects and add them to this slide
-	slide._slideObjects.forEach((slideItemObj: ISlideObject, idx: number) => {
+	let containerX = Infinity
+	let containerY = Infinity
+	let containerCx = 0
+	let containerCy = 0
+	slideItemObjs.forEach((slideItemObj: ISlideObject, idx: number) => {
 		let x = 0
 		let y = 0
 		let cx = getSmartParseNumber('75%', 'X', slide._presLayout)
@@ -688,12 +682,65 @@ function slideObjectToXml (slide: PresSlide | SlideLayout): string {
 				strSlideXml += ' </a:graphic>'
 				strSlideXml += '</p:graphicFrame>'
 				break
+			case SLIDE_OBJECT_TYPES.group:
+				if (slideItemObj.group._slideObjects.length > 0) {
+					const res = slideItemObjsToXml(slideItemObj.group._slideObjects, slide)
+					strSlideXml += '<p:grpSp>'
+					strSlideXml += `<p:nvGrpSpPr><p:cNvPr id="${idx + 1}" name="Group"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>`
+					strSlideXml += `<p:grpSpPr><a:xfrm><a:off x="${res.x}" y="${res.y}"/><a:ext cx="${res.cx}" cy="${res.cy}"/>`
+					strSlideXml += `<a:chOff x="${res.x}" y="${res.y}"/><a:chExt cx="${res.cx}" cy="${res.cy}"/></a:xfrm></p:grpSpPr>`
+					strSlideXml += res.xmlStr
+					strSlideXml += '</p:grpSp>'
+				}
+				break
 
 			default:
 				strSlideXml += ''
 				break
 		}
+		// The top left corner of the container should match the position of the object that is closest to the top left corner of the slide
+		containerX = Math.min(containerX, x)
+		containerY = Math.min(containerY, y)
+		// If the object is outside of the bounds of the container we increase the width/height accordingly
+		containerCx = containerX + containerCx >= x + cx ? containerCx : containerCx + (x + cx - (containerX + containerCx))
+		containerCy = containerY + containerCy >= y + cy ? containerCy : containerCy + (y + cy - (containerY + containerCy))
 	})
+
+	return {
+		xmlStr: strSlideXml,
+		x: containerX,
+		y: containerY,
+		cx: containerCx,
+		cy: containerCy,
+	}
+}
+/**
+ * Transforms a slide or slideLayout to resulting XML string - Creates `ppt/slide*.xml`
+ * @param {PresSlide|SlideLayout} slideObject - slide object created within createSlideObject
+ * @return {string} XML string with <p:cSld> as the root
+ */
+function slideObjectToXml (slide: PresSlide | SlideLayout): string {
+	let strSlideXml: string = slide._name ? '<p:cSld name="' + slide._name + '">' : '<p:cSld>'
+
+	// STEP 1: Add background color/image (ensure only a single `<p:bg>` tag is created, ex: when master-baskground has both `color` and `path`)
+	if (slide._bkgdImgRid) {
+		strSlideXml += `<p:bg><p:bgPr><a:blipFill dpi="0" rotWithShape="1"><a:blip r:embed="rId${slide._bkgdImgRid}"><a:lum/></a:blip><a:srcRect/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>`
+	} else if (slide.background?.color) {
+		strSlideXml += `<p:bg><p:bgPr>${genXmlColorSelection(slide.background)}</p:bgPr></p:bg>`
+	} else if (!slide.bkgd && slide._name && slide._name === DEF_PRES_LAYOUT_NAME) {
+		// NOTE: Default [white] background is needed on slideMaster1.xml to avoid gray background in Keynote (and Finder previews)
+		strSlideXml += '<p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>'
+	}
+
+	// STEP 2: Continue slide by starting spTree node
+	strSlideXml += '<p:spTree>'
+	strSlideXml += '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>'
+	strSlideXml += '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>'
+	strSlideXml += '<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>'
+
+	// STEP 3: Loop over all Slide.data objects and add them to this slide
+	const { xmlStr } = slideItemObjsToXml(slide._slideObjects, slide)
+	strSlideXml += xmlStr
 
 	// STEP 4: Add slide numbers (if any) last
 	if (slide._slideNumberProps) {

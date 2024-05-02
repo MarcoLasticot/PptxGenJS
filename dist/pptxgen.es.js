@@ -1,4 +1,4 @@
-/* PptxGenJS 3.13.0-beta.0 @ 2023-05-17T03:15:58.392Z */
+/* PptxGenJS 3.13.0-beta.1 @ 2024-05-02T14:09:44.840Z */
 import JSZip from 'jszip';
 
 /******************************************************************************
@@ -620,6 +620,7 @@ var MASTER_OBJECTS;
 var SLIDE_OBJECT_TYPES;
 (function (SLIDE_OBJECT_TYPES) {
     SLIDE_OBJECT_TYPES["chart"] = "chart";
+    SLIDE_OBJECT_TYPES["group"] = "group";
     SLIDE_OBJECT_TYPES["hyperlink"] = "hyperlink";
     SLIDE_OBJECT_TYPES["image"] = "image";
     SLIDE_OBJECT_TYPES["media"] = "media";
@@ -1650,15 +1651,15 @@ function createSlideMaster(props, target) {
             var key = Object.keys(object)[0];
             var tgt = target;
             if (MASTER_OBJECTS[key] && key === 'chart')
-                addChartDefinition(tgt, object[key].type, object[key].data, object[key].opts);
+                addChartDefinition(tgt, tgt, object[key].type, object[key].data, object[key].opts);
             else if (MASTER_OBJECTS[key] && key === 'image')
-                addImageDefinition(tgt, object[key]);
+                addImageDefinition(tgt, tgt, object[key]);
             else if (MASTER_OBJECTS[key] && key === 'line')
-                addShapeDefinition(tgt, SHAPE_TYPE.LINE, object[key]);
+                addShapeDefinition(tgt, tgt, SHAPE_TYPE.LINE, object[key]);
             else if (MASTER_OBJECTS[key] && key === 'rect')
-                addShapeDefinition(tgt, SHAPE_TYPE.RECTANGLE, object[key]);
+                addShapeDefinition(tgt, tgt, SHAPE_TYPE.RECTANGLE, object[key]);
             else if (MASTER_OBJECTS[key] && key === 'text')
-                addTextDefinition(tgt, [{ text: object[key].text }], object[key].options, false);
+                addTextDefinition(tgt, tgt, [{ text: object[key].text }], object[key].options, false);
             else if (MASTER_OBJECTS[key] && key === 'placeholder') {
                 // TODO: 20180820: Check for existing `name`?
                 object[key].options.placeholder = object[key].options.name;
@@ -1666,7 +1667,7 @@ function createSlideMaster(props, target) {
                 object[key].options._placeholderType = object[key].options.type;
                 delete object[key].options.type; // remap name for earier handling internally
                 object[key].options._placeholderIdx = 100 + idx;
-                addTextDefinition(tgt, [{ text: object[key].text }], object[key].options, true);
+                addTextDefinition(tgt, tgt, [{ text: object[key].text }], object[key].options, true);
                 // TODO: ISSUE#599 - only text is suported now (add more below)
                 // else if (object[key].image) addImageDefinition(tgt, object[key].image)
                 /* 20200120: So... image placeholders go into the "slideLayoutN.xml" file and addImage doesnt do this yet...
@@ -1713,7 +1714,7 @@ function createSlideMaster(props, target) {
  *    ]
  * }
  */
-function addChartDefinition(target, type, data, opt) {
+function addChartDefinition(target, slide, type, data, opt) {
     var _a;
     function correctGridLineOptions(glOpts) {
         if (!glOpts || glOpts.style === 'none')
@@ -1957,10 +1958,10 @@ function addChartDefinition(target, type, data, opt) {
     // STEP 4: Set props
     resultObject._type = 'chart';
     resultObject.options = options;
-    resultObject.chartRid = getNewRelId(target);
+    resultObject.chartRid = getNewRelId(slide);
     // STEP 5: Add this chart to this Slide Rels (rId/rels count spans all slides! Count all images to get next rId)
-    target._relsChart.push({
-        rId: getNewRelId(target),
+    slide._relsChart.push({
+        rId: getNewRelId(slide),
         data: tmpData,
         opts: options,
         type: options._type,
@@ -1979,7 +1980,7 @@ function addChartDefinition(target, type, data, opt) {
  * @note: Remote images (eg: "http://whatev.com/blah"/from web and/or remote server arent supported yet - we'd need to create an <img>, load it, then send to canvas
  * @see: https://stackoverflow.com/questions/164181/how-to-fetch-a-remote-image-to-display-in-a-canvas)
  */
-function addImageDefinition(target, opt) {
+function addImageDefinition(target, slide, opt) {
     var newObject = {
         _type: null,
         text: null,
@@ -1997,7 +1998,7 @@ function addImageDefinition(target, opt) {
     var objHyperlink = opt.hyperlink || '';
     var strImageData = opt.data || '';
     var strImagePath = opt.path || '';
-    var imageRelId = getNewRelId(target);
+    var imageRelId = getNewRelId(slide);
     var objectName = opt.objectName ? encodeXmlEntities(opt.objectName) : "Image ".concat(target._slideObjects.filter(function (obj) { return obj._type === SLIDE_OBJECT_TYPES.image; }).length);
     // REALITY-CHECK:
     if (!strImagePath && !strImageData) {
@@ -2059,38 +2060,38 @@ function addImageDefinition(target, opt) {
         // SVG files consume *TWO* rId's: (a png version and the svg image)
         // <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>
         // <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image2.svg"/>
-        target._relsMedia.push({
+        slide._relsMedia.push({
             path: strImagePath || strImageData + 'png',
             type: 'image/png',
             extn: 'png',
             data: strImageData || '',
             rId: imageRelId,
-            Target: "../media/image-".concat(target._slideNum, "-").concat(target._relsMedia.length + 1, ".png"),
+            Target: "../media/image-".concat(slide._slideNum, "-").concat(slide._relsMedia.length + 1, ".png"),
             isSvgPng: true,
-            svgSize: { w: getSmartParseNumber(newObject.options.w, 'X', target._presLayout), h: getSmartParseNumber(newObject.options.h, 'Y', target._presLayout) },
+            svgSize: { w: getSmartParseNumber(newObject.options.w, 'X', slide._presLayout), h: getSmartParseNumber(newObject.options.h, 'Y', slide._presLayout) },
         });
         newObject.imageRid = imageRelId;
-        target._relsMedia.push({
+        slide._relsMedia.push({
             path: strImagePath || strImageData,
             type: 'image/svg+xml',
             extn: strImgExtn,
             data: strImageData || '',
             rId: imageRelId + 1,
-            Target: "../media/image-".concat(target._slideNum, "-").concat(target._relsMedia.length + 1, ".").concat(strImgExtn),
+            Target: "../media/image-".concat(slide._slideNum, "-").concat(slide._relsMedia.length + 1, ".").concat(strImgExtn),
         });
         newObject.imageRid = imageRelId + 1;
     }
     else {
         // PERF: Duplicate media should reuse existing `Target` value and not create an additional copy
-        var dupeItem = target._relsMedia.filter(function (item) { return item.path && item.path === strImagePath && item.type === 'image/' + strImgExtn && !item.isDuplicate; })[0];
-        target._relsMedia.push({
+        var dupeItem = slide._relsMedia.filter(function (item) { return item.path && item.path === strImagePath && item.type === 'image/' + strImgExtn && !item.isDuplicate; })[0];
+        slide._relsMedia.push({
             path: strImagePath || 'preencoded.' + strImgExtn,
             type: 'image/' + strImgExtn,
             extn: strImgExtn,
             data: strImageData || '',
             rId: imageRelId,
             isDuplicate: !!(dupeItem === null || dupeItem === void 0 ? void 0 : dupeItem.Target),
-            Target: (dupeItem === null || dupeItem === void 0 ? void 0 : dupeItem.Target) ? dupeItem.Target : "../media/image-".concat(target._slideNum, "-").concat(target._relsMedia.length + 1, ".").concat(strImgExtn),
+            Target: (dupeItem === null || dupeItem === void 0 ? void 0 : dupeItem.Target) ? dupeItem.Target : "../media/image-".concat(slide._slideNum, "-").concat(slide._relsMedia.length + 1, ".").concat(strImgExtn),
         });
         newObject.imageRid = imageRelId;
     }
@@ -2100,7 +2101,7 @@ function addImageDefinition(target, opt) {
             throw new Error('ERROR: `hyperlink` option requires either: `url` or `slide`');
         else {
             imageRelId++;
-            target._rels.push({
+            slide._rels.push({
                 type: SLIDE_OBJECT_TYPES.hyperlink,
                 data: objHyperlink.slide ? 'slide' : 'dummy',
                 rId: imageRelId,
@@ -2118,7 +2119,7 @@ function addImageDefinition(target, opt) {
  * @param {PresSlide} `target` - slide object that the media will be added to
  * @param {MediaProps} `opt` - media options
  */
-function addMediaDefinition(target, opt) {
+function addMediaDefinition(target, slide, opt) {
     var intPosX = opt.x || 0;
     var intPosY = opt.y || 0;
     var intSizeX = opt.w || 2;
@@ -2169,9 +2170,9 @@ function addMediaDefinition(target, opt) {
      * <Relationship Id="rId3" Target="../media/media1.mov" Type="http://schemas.microsoft.com/office/2007/relationships/media"/>
      */
     if (strType === 'online') {
-        var relId1 = getNewRelId(target);
+        var relId1 = getNewRelId(slide);
         // A: Add video
-        target._relsMedia.push({
+        slide._relsMedia.push({
             path: strPath || 'preencoded' + strExtn,
             data: 'dummy',
             type: 'online',
@@ -2181,48 +2182,48 @@ function addMediaDefinition(target, opt) {
         });
         slideData.mediaRid = relId1;
         // B: Add cover (preview/overlay) image
-        target._relsMedia.push({
+        slide._relsMedia.push({
             path: 'preencoded.png',
             data: strCover,
             type: 'image/png',
             extn: 'png',
-            rId: getNewRelId(target),
-            Target: "../media/image-".concat(target._slideNum, "-").concat(target._relsMedia.length + 1, ".png"),
+            rId: getNewRelId(slide),
+            Target: "../media/image-".concat(slide._slideNum, "-").concat(slide._relsMedia.length + 1, ".png"),
         });
     }
     else {
         // PERF: Duplicate media should reuse existing `Target` value and not create an additional copy
-        var dupeItem = target._relsMedia.filter(function (item) { return item.path && item.path === strPath && item.type === strType + '/' + strExtn && !item.isDuplicate; })[0];
+        var dupeItem = slide._relsMedia.filter(function (item) { return item.path && item.path === strPath && item.type === strType + '/' + strExtn && !item.isDuplicate; })[0];
         // A: "relationships/video"
-        var relId1 = getNewRelId(target);
-        target._relsMedia.push({
+        var relId1 = getNewRelId(slide);
+        slide._relsMedia.push({
             path: strPath || 'preencoded' + strExtn,
             type: strType + '/' + strExtn,
             extn: strExtn,
             data: strData || '',
             rId: relId1,
             isDuplicate: !!(dupeItem === null || dupeItem === void 0 ? void 0 : dupeItem.Target),
-            Target: (dupeItem === null || dupeItem === void 0 ? void 0 : dupeItem.Target) ? dupeItem.Target : "../media/media-".concat(target._slideNum, "-").concat(target._relsMedia.length + 1, ".").concat(strExtn),
+            Target: (dupeItem === null || dupeItem === void 0 ? void 0 : dupeItem.Target) ? dupeItem.Target : "../media/media-".concat(slide._slideNum, "-").concat(slide._relsMedia.length + 1, ".").concat(strExtn),
         });
         slideData.mediaRid = relId1;
         // B: "relationships/media"
-        target._relsMedia.push({
+        slide._relsMedia.push({
             path: strPath || 'preencoded' + strExtn,
             type: strType + '/' + strExtn,
             extn: strExtn,
             data: strData || '',
-            rId: getNewRelId(target),
+            rId: getNewRelId(slide),
             isDuplicate: !!(dupeItem === null || dupeItem === void 0 ? void 0 : dupeItem.Target),
-            Target: (dupeItem === null || dupeItem === void 0 ? void 0 : dupeItem.Target) ? dupeItem.Target : "../media/media-".concat(target._slideNum, "-").concat(target._relsMedia.length + 0, ".").concat(strExtn),
+            Target: (dupeItem === null || dupeItem === void 0 ? void 0 : dupeItem.Target) ? dupeItem.Target : "../media/media-".concat(slide._slideNum, "-").concat(slide._relsMedia.length + 0, ".").concat(strExtn),
         });
         // C: Add cover (preview/overlay) image
-        target._relsMedia.push({
+        slide._relsMedia.push({
             path: 'preencoded.png',
             type: 'image/png',
             extn: 'png',
             data: strCover,
-            rId: getNewRelId(target),
-            Target: "../media/image-".concat(target._slideNum, "-").concat(target._relsMedia.length + 1, ".png"),
+            rId: getNewRelId(slide),
+            Target: "../media/image-".concat(slide._slideNum, "-").concat(slide._relsMedia.length + 1, ".png"),
         });
     }
     // LAST
@@ -2246,7 +2247,7 @@ function addNotesDefinition(target, notes) {
  * @param {SHAPE_NAME} shapeName shape name
  * @param {ShapeProps} opts shape options
  */
-function addShapeDefinition(target, shapeName, opts) {
+function addShapeDefinition(target, slide, shapeName, opts) {
     var options = typeof opts === 'object' ? opts : {};
     options.line = options.line || { type: 'none' };
     var newObject = {
@@ -2293,13 +2294,13 @@ function addShapeDefinition(target, shapeName, opts) {
     if (typeof options.lineTail === 'string')
         options.line.endArrowType = options.lineTail; // @deprecated (part of `ShapeLineProps` now)
     // 4: Create hyperlink rels
-    createHyperlinkRels(target, newObject);
+    createHyperlinkRels(slide, newObject);
     // LAST: Add object to slide
     target._slideObjects.push(newObject);
 }
 /**
  * Adds a table object to a slide definition.
- * @param {PresSlide} target - slide object that the table should be added to
+ * @param {PresSlide} slide - slide object that the table should be added to
  * @param {TableRow[]} tableRows - table data
  * @param {TableProps} options - table options
  * @param {SlideLayout} slideLayout - Slide layout
@@ -2307,10 +2308,10 @@ function addShapeDefinition(target, shapeName, opts) {
  * @param {Function} addSlide - method
  * @param {Function} getSlide - method
  */
-function addTableDefinition(target, tableRows, options, slideLayout, presLayout, addSlide, getSlide) {
-    var slides = [target]; // Create array of Slides as more may be added by auto-paging
+function addTableDefinition(target, slide, tableRows, options, slideLayout, presLayout, addSlide, getSlide) {
+    var slides = [slide]; // Create array of Slides as more may be added by auto-paging
     var opt = options && typeof options === 'object' ? options : {};
-    opt.objectName = opt.objectName ? encodeXmlEntities(opt.objectName) : "Table ".concat(target._slideObjects.filter(function (obj) { return obj._type === SLIDE_OBJECT_TYPES.table; }).length);
+    opt.objectName = opt.objectName ? encodeXmlEntities(opt.objectName) : "Table ".concat(slide._slideObjects.filter(function (obj) { return obj._type === SLIDE_OBJECT_TYPES.table; }).length);
     // STEP 1: REALITY-CHECK
     {
         // A: check for empty
@@ -2525,9 +2526,9 @@ function addTableDefinition(target, tableRows, options, slideLayout, presLayout,
     // (used internally by `tableToSlides()` to not engage recursion - we've already paged the table data, just add this one)
     if (opt && !opt.autoPage) {
         // Create hyperlink rels (IMPORTANT: Wait until table has been shredded across Slides or all rels will end-up on Slide 1!)
-        createHyperlinkRels(target, arrRows);
+        createHyperlinkRels(slide, arrRows);
         // Add slideObjects (NOTE: Use `extend` to avoid mutation)
-        target._slideObjects.push({
+        slide._slideObjects.push({
             _type: SLIDE_OBJECT_TYPES.table,
             arrTabRows: arrRows,
             options: Object.assign({}, opt),
@@ -2537,21 +2538,21 @@ function addTableDefinition(target, tableRows, options, slideLayout, presLayout,
         if (opt.autoPageRepeatHeader)
             opt._arrObjTabHeadRows = arrRows.filter(function (_row, idx) { return idx < opt.autoPageHeaderRows; });
         // Loop over rows and create 1-N tables as needed (ISSUE#21)
-        getSlidesForTableRows(arrRows, opt, presLayout, slideLayout).forEach(function (slide, idx) {
+        getSlidesForTableRows(arrRows, opt, presLayout, slideLayout).forEach(function (tableRowSlide, idx) {
             // A: Create new Slide when needed, otherwise, use existing (NOTE: More than 1 table can be on a Slide, so we will go up AND down the Slide chain)
-            if (!getSlide(target._slideNum + idx))
+            if (!getSlide(slide._slideNum + idx))
                 slides.push(addSlide({ masterName: (slideLayout === null || slideLayout === void 0 ? void 0 : slideLayout._name) || null }));
             // B: Reset opt.y to `option`/`margin` after first Slide (ISSUE#43, ISSUE#47, ISSUE#48)
             if (idx > 0)
                 opt.y = inch2Emu(opt.autoPageSlideStartY || opt.newSlideStartY || arrTableMargin[0]);
             // C: Add this table to new Slide
             {
-                var newSlide = getSlide(target._slideNum + idx);
+                var newSlide = getSlide(slide._slideNum + idx);
                 opt.autoPage = false;
                 // Create hyperlink rels (IMPORTANT: Wait until table has been shredded across Slides or all rels will end-up on Slide 1!)
-                createHyperlinkRels(newSlide, slide.rows);
+                createHyperlinkRels(newSlide, tableRowSlide.rows);
                 // Add rows to new slide
-                newSlide.addTable(slide.rows, Object.assign({}, opt));
+                newSlide.addTable(tableRowSlide.rows, Object.assign({}, opt));
                 // Add reference to the new slide so it can be returned, but don't add the first one because the user already has a reference to that one.
                 if (idx > 0)
                     newAutoPagedSlides.push(newSlide);
@@ -2568,7 +2569,7 @@ function addTableDefinition(target, tableRows, options, slideLayout, presLayout,
  * @param {boolean} isPlaceholder whether this a placeholder object
  * @since: 1.0.0
  */
-function addTextDefinition(target, text, opts, isPlaceholder) {
+function addTextDefinition(target, slide, text, opts, isPlaceholder) {
     var newObject = {
         _type: isPlaceholder ? SLIDE_OBJECT_TYPES.placeholder : SLIDE_OBJECT_TYPES.text,
         shape: (opts === null || opts === void 0 ? void 0 : opts.shape) || SHAPE_TYPE.RECTANGLE,
@@ -2580,15 +2581,15 @@ function addTextDefinition(target, text, opts, isPlaceholder) {
         {
             // A.1: Color (placeholders should inherit their colors or override them, so don't default them)
             if (!itemOpts.placeholder) {
-                itemOpts.color = itemOpts.color || newObject.options.color || target.color || DEF_FONT_COLOR;
+                itemOpts.color = itemOpts.color || newObject.options.color || slide.color || DEF_FONT_COLOR;
             }
             // A.2: Placeholder should inherit their bullets or override them, so don't default them
             if (itemOpts.placeholder || isPlaceholder) {
                 itemOpts.bullet = itemOpts.bullet || false;
             }
             // A.3: Text targeting a placeholder need to inherit the placeholders options (eg: margin, valign, etc.) (Issue #640)
-            if (itemOpts.placeholder && target._slideLayout && target._slideLayout._slideObjects) {
-                var placeHold = target._slideLayout._slideObjects.filter(function (item) { return item._type === 'placeholder' && item.options && item.options.placeholder && item.options.placeholder === itemOpts.placeholder; })[0];
+            if (itemOpts.placeholder && slide._slideLayout && slide._slideLayout._slideObjects) {
+                var placeHold = slide._slideLayout._slideObjects.filter(function (item) { return item._type === 'placeholder' && item.options && item.options.placeholder && item.options.placeholder === itemOpts.placeholder; })[0];
                 if (placeHold === null || placeHold === void 0 ? void 0 : placeHold.options)
                     itemOpts = __assign(__assign({}, itemOpts), placeHold.options);
             }
@@ -2675,7 +2676,7 @@ function addTextDefinition(target, text, opts, isPlaceholder) {
     // STEP 2: Create/Clean text options
     newObject.text.forEach(function (item) { return (item.options = cleanOpts(item.options || {})); });
     // STEP 3: Create hyperlinks
-    createHyperlinkRels(target, newObject.text || '');
+    createHyperlinkRels(slide, newObject.text || '');
     // LAST: Add object to Slide
     target._slideObjects.push(newObject);
 }
@@ -2691,7 +2692,7 @@ function addPlaceholdersToSlideLayouts(slide) {
             // NOTE: Check to ensure a placeholder does not already exist on the Slide
             // They are created when they have been populated with text (ex: `slide.addText('Hi', { placeholder:'title' });`)
             if (slide._slideObjects.filter(function (slideObj) { return slideObj.options && slideObj.options.placeholder === slideLayoutObj.options.placeholder; }).length === 0) {
-                addTextDefinition(slide, [{ text: '' }], slideLayoutObj.options, false);
+                addTextDefinition(slide, slide, [{ text: '' }], slideLayoutObj.options, false);
             }
         }
     });
@@ -2784,6 +2785,98 @@ function createHyperlinkRels(target, text) {
         }
     });
 }
+
+var Group = /** @class */ (function () {
+    function Group(params) {
+        this._slideObjects = [];
+        this._slide = params.slide;
+        this.addSlide = params.addSlide;
+        this.getSlide = params.getSlide;
+    }
+    /**
+     * Add chart to Group
+     * @param {CHART_NAME|IChartMulti[]} type - chart type
+     * @param {object[]} data - data object
+     * @param {IChartOpts} options - chart options
+     * @return {Group} this Group
+     */
+    Group.prototype.addChart = function (type, data, options) {
+        // FUTURE: TODO-VERSION-4: Remove first arg - only take data and opts, with "type" required on opts
+        // Set `_type` on IChartOptsLib as its what is used as object is passed around
+        var optionsWithType = options || {};
+        optionsWithType._type = type;
+        addChartDefinition(this, this._slide, type, data, options);
+        return this;
+    };
+    /**
+     * Add image to Group
+     * @param {ImageProps} options - image options
+     * @return {Group} this Group
+     */
+    Group.prototype.addImage = function (options) {
+        addImageDefinition(this, this._slide, options);
+        return this;
+    };
+    /**
+     * Add media (audio/video) to Group
+     * @param {MediaProps} options - media options
+     * @return {Group} this Group
+     */
+    Group.prototype.addMedia = function (options) {
+        addMediaDefinition(this, this._slide, options);
+        return this;
+    };
+    /**
+     * Add shape to Group
+     * @param {SHAPE_NAME} shapeName - shape name
+     * @param {ShapeProps} options - shape options
+     * @return {Group} this Group
+     */
+    Group.prototype.addShape = function (shapeName, options) {
+        // NOTE: As of v3.1.0, <script> users are passing the old shape object from the shapes file (orig to the project)
+        // But React/TypeScript users are passing the shapeName from an enum, which is a simple string, so lets cast
+        // <script./> => `pptx.shapes.RECTANGLE` [string] "rect" ... shapeName['name'] = 'rect'
+        // TypeScript => `pptxgen.shapes.RECTANGLE` [string] "rect" ... shapeName = 'rect'
+        // let shapeNameDecode = typeof shapeName === 'object' && shapeName['name'] ? shapeName['name'] : shapeName
+        addShapeDefinition(this, this._slide, shapeName, options);
+        return this;
+    };
+    /**
+     * Add table to Group
+     * @param {TableRow[]} tableRows - table rows
+     * @param {TableProps} options - table options
+     * @return {Group} this Group
+     */
+    Group.prototype.addTable = function (tableRows, options) {
+        // FUTURE: we pass `this` - we dont need to pass layouts - they can be read from this!
+        addTableDefinition(this, this._slide, tableRows, options, this._slide._slideLayout, this._slide._presLayout, this.addSlide, this.getSlide);
+        return this;
+    };
+    /**
+     * Add text to Group
+     * @param {string|TextProps[]} text - text string or complex object
+     * @param {TextPropsOptions} options - text options
+     * @return {Group} this Group
+     */
+    Group.prototype.addText = function (text, options) {
+        var textParam = typeof text === 'string' || typeof text === 'number' ? [{ text: text, options: options }] : text;
+        addTextDefinition(this, this._slide, textParam, options, false);
+        return this;
+    };
+    Group.prototype.addGroup = function () {
+        var group = new Group({
+            slide: this._slide,
+            addSlide: this.addSlide,
+            getSlide: this.getSlide,
+        });
+        this._slideObjects.push({
+            _type: SLIDE_OBJECT_TYPES.group,
+            group: group,
+        });
+        return group;
+    };
+    return Group;
+}());
 
 /**
  * PptxGenJS: Slide Class
@@ -2893,7 +2986,7 @@ var Slide = /** @class */ (function () {
         // Set `_type` on IChartOptsLib as its what is used as object is passed around
         var optionsWithType = options || {};
         optionsWithType._type = type;
-        addChartDefinition(this, type, data, options);
+        addChartDefinition(this, this, type, data, options);
         return this;
     };
     /**
@@ -2902,7 +2995,7 @@ var Slide = /** @class */ (function () {
      * @return {Slide} this Slide
      */
     Slide.prototype.addImage = function (options) {
-        addImageDefinition(this, options);
+        addImageDefinition(this, this, options);
         return this;
     };
     /**
@@ -2911,7 +3004,7 @@ var Slide = /** @class */ (function () {
      * @return {Slide} this Slide
      */
     Slide.prototype.addMedia = function (options) {
-        addMediaDefinition(this, options);
+        addMediaDefinition(this, this, options);
         return this;
     };
     /**
@@ -2936,7 +3029,7 @@ var Slide = /** @class */ (function () {
         // <script./> => `pptx.shapes.RECTANGLE` [string] "rect" ... shapeName['name'] = 'rect'
         // TypeScript => `pptxgen.shapes.RECTANGLE` [string] "rect" ... shapeName = 'rect'
         // let shapeNameDecode = typeof shapeName === 'object' && shapeName['name'] ? shapeName['name'] : shapeName
-        addShapeDefinition(this, shapeName, options);
+        addShapeDefinition(this, this, shapeName, options);
         return this;
     };
     /**
@@ -2947,7 +3040,7 @@ var Slide = /** @class */ (function () {
      */
     Slide.prototype.addTable = function (tableRows, options) {
         // FUTURE: we pass `this` - we dont need to pass layouts - they can be read from this!
-        this._newAutoPagedSlides = addTableDefinition(this, tableRows, options, this._slideLayout, this._presLayout, this.addSlide, this.getSlide);
+        this._newAutoPagedSlides = addTableDefinition(this, this, tableRows, options, this._slideLayout, this._presLayout, this.addSlide, this.getSlide);
         return this;
     };
     /**
@@ -2958,8 +3051,20 @@ var Slide = /** @class */ (function () {
      */
     Slide.prototype.addText = function (text, options) {
         var textParam = typeof text === 'string' || typeof text === 'number' ? [{ text: text, options: options }] : text;
-        addTextDefinition(this, textParam, options, false);
+        addTextDefinition(this, this, textParam, options, false);
         return this;
+    };
+    Slide.prototype.addGroup = function () {
+        var group = new Group({
+            slide: this,
+            addSlide: this.addSlide,
+            getSlide: this.getSlide,
+        });
+        this._slideObjects.push({
+            _type: SLIDE_OBJECT_TYPES.group,
+            group: group,
+        });
+        return group;
     };
     return Slide;
 }());
@@ -5067,32 +5172,19 @@ var ImageSizingXml = {
     },
 };
 /**
- * Transforms a slide or slideLayout to resulting XML string - Creates `ppt/slide*.xml`
- * @param {PresSlide|SlideLayout} slideObject - slide object created within createSlideObject
- * @return {string} XML string with <p:cSld> as the root
+ * Transforms a list of slide objects to an XML string and returns the position and size values for their container.
+ * @param {ISlideObject[]} slideItemObjs
+ * @param {PresSlide|SlideLayout} slide
+ * @returns {SlideItemObjsToXmlResult}
  */
-function slideObjectToXml(slide) {
-    var _a;
-    var strSlideXml = slide._name ? '<p:cSld name="' + slide._name + '">' : '<p:cSld>';
+function slideItemObjsToXml(slideItemObjs, slide) {
+    var strSlideXml = '';
     var intTableNum = 1;
-    // STEP 1: Add background color/image (ensure only a single `<p:bg>` tag is created, ex: when master-baskground has both `color` and `path`)
-    if (slide._bkgdImgRid) {
-        strSlideXml += "<p:bg><p:bgPr><a:blipFill dpi=\"0\" rotWithShape=\"1\"><a:blip r:embed=\"rId".concat(slide._bkgdImgRid, "\"><a:lum/></a:blip><a:srcRect/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>");
-    }
-    else if ((_a = slide.background) === null || _a === void 0 ? void 0 : _a.color) {
-        strSlideXml += "<p:bg><p:bgPr>".concat(genXmlColorSelection(slide.background), "</p:bgPr></p:bg>");
-    }
-    else if (!slide.bkgd && slide._name && slide._name === DEF_PRES_LAYOUT_NAME) {
-        // NOTE: Default [white] background is needed on slideMaster1.xml to avoid gray background in Keynote (and Finder previews)
-        strSlideXml += '<p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>';
-    }
-    // STEP 2: Continue slide by starting spTree node
-    strSlideXml += '<p:spTree>';
-    strSlideXml += '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>';
-    strSlideXml += '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>';
-    strSlideXml += '<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>';
-    // STEP 3: Loop over all Slide.data objects and add them to this slide
-    slide._slideObjects.forEach(function (slideItemObj, idx) {
+    var containerX = Infinity;
+    var containerY = Infinity;
+    var containerCx = 0;
+    var containerCy = 0;
+    slideItemObjs.forEach(function (slideItemObj, idx) {
         var _a, _b, _c, _d, _e, _f, _g, _h;
         var x = 0;
         var y = 0;
@@ -5636,11 +5728,63 @@ function slideObjectToXml(slide) {
                 strSlideXml += ' </a:graphic>';
                 strSlideXml += '</p:graphicFrame>';
                 break;
+            case SLIDE_OBJECT_TYPES.group:
+                if (slideItemObj.group._slideObjects.length > 0) {
+                    var res = slideItemObjsToXml(slideItemObj.group._slideObjects, slide);
+                    strSlideXml += '<p:grpSp>';
+                    strSlideXml += "<p:nvGrpSpPr><p:cNvPr id=\"".concat(idx + 1, "\" name=\"Group\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
+                    strSlideXml += "<p:grpSpPr><a:xfrm><a:off x=\"".concat(res.x, "\" y=\"").concat(res.y, "\"/><a:ext cx=\"").concat(res.cx, "\" cy=\"").concat(res.cy, "\"/>");
+                    strSlideXml += "<a:chOff x=\"".concat(res.x, "\" y=\"").concat(res.y, "\"/><a:chExt cx=\"").concat(res.cx, "\" cy=\"").concat(res.cy, "\"/></a:xfrm></p:grpSpPr>");
+                    strSlideXml += res.xmlStr;
+                    strSlideXml += '</p:grpSp>';
+                }
+                break;
             default:
                 strSlideXml += '';
                 break;
         }
+        // The top left corner of the container should match the position of the object that is closest to the top left corner of the slide
+        containerX = Math.min(containerX, x);
+        containerY = Math.min(containerY, y);
+        // If the object is outside of the bounds of the container we increase the width/height accordingly
+        containerCx = containerX + containerCx >= x + cx ? containerCx : containerCx + (x + cx - (containerX + containerCx));
+        containerCy = containerY + containerCy >= y + cy ? containerCy : containerCy + (y + cy - (containerY + containerCy));
     });
+    return {
+        xmlStr: strSlideXml,
+        x: containerX,
+        y: containerY,
+        cx: containerCx,
+        cy: containerCy,
+    };
+}
+/**
+ * Transforms a slide or slideLayout to resulting XML string - Creates `ppt/slide*.xml`
+ * @param {PresSlide|SlideLayout} slideObject - slide object created within createSlideObject
+ * @return {string} XML string with <p:cSld> as the root
+ */
+function slideObjectToXml(slide) {
+    var _a;
+    var strSlideXml = slide._name ? '<p:cSld name="' + slide._name + '">' : '<p:cSld>';
+    // STEP 1: Add background color/image (ensure only a single `<p:bg>` tag is created, ex: when master-baskground has both `color` and `path`)
+    if (slide._bkgdImgRid) {
+        strSlideXml += "<p:bg><p:bgPr><a:blipFill dpi=\"0\" rotWithShape=\"1\"><a:blip r:embed=\"rId".concat(slide._bkgdImgRid, "\"><a:lum/></a:blip><a:srcRect/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>");
+    }
+    else if ((_a = slide.background) === null || _a === void 0 ? void 0 : _a.color) {
+        strSlideXml += "<p:bg><p:bgPr>".concat(genXmlColorSelection(slide.background), "</p:bgPr></p:bg>");
+    }
+    else if (!slide.bkgd && slide._name && slide._name === DEF_PRES_LAYOUT_NAME) {
+        // NOTE: Default [white] background is needed on slideMaster1.xml to avoid gray background in Keynote (and Finder previews)
+        strSlideXml += '<p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>';
+    }
+    // STEP 2: Continue slide by starting spTree node
+    strSlideXml += '<p:spTree>';
+    strSlideXml += '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>';
+    strSlideXml += '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>';
+    strSlideXml += '<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>';
+    // STEP 3: Loop over all Slide.data objects and add them to this slide
+    var xmlStr = slideItemObjsToXml(slide._slideObjects, slide).xmlStr;
+    strSlideXml += xmlStr;
     // STEP 4: Add slide numbers (if any) last
     if (slide._slideNumberProps) {
         // Set some defaults (done here b/c SlideNumber canbe added to masters or slides and has numerous entry points)
@@ -6984,6 +7128,7 @@ var PptxGenJS = /** @class */ (function () {
             addShape: null,
             addTable: null,
             addText: null,
+            addGroup: null,
             //
             _name: null,
             _presLayout: this._presLayout,
