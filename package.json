@@ -1,12 +1,12 @@
 {
   "name": "pptxgenjs",
-  "version": "3.13.0-beta.1",
+  "version": "3.14.0",
   "author": {
-    "name": "Brent Ely",
-    "url": "https://github.com/gitbrent/"
+    "name": "MarcoLasticot",
+    "url": "https://github.com/MarcoLasticot/"
   },
   "description": "Create JavaScript PowerPoint Presentations",
-  "homepage": "https://gitbrent.github.io/PptxGenJS/",
+  "homepage": "https://MarcoLasticot.github.io/PptxGenJS/",
   "license": "MIT",
   "main": "dist/pptxgen.cjs.js",
   "module": "dist/pptxgen.es.js",
@@ -64,7 +64,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gitbrent/PptxGenJS.git"
+    "url": "git+https://github.com/MarcoLasticot/PptxGenJS.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "keywords": [
     "html-to-powerpoint",

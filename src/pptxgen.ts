@@ -79,6 +79,8 @@ import {
 } from './core-enums'
 import {
 	AddSlideProps,
+	AddFontProps,
+	FontInfo,
 	IPresentationProps,
 	PresLayout,
 	PresSlide,
@@ -311,6 +313,11 @@ export default class PptxGenJS implements IPresentationProps {
 		return this._shapes
 	}
 
+	private _fonts: FontInfo[] = []
+	public get fonts (): FontInfo[] {
+		return this._fonts
+	}
+
 	constructor () {
 		const layout4x3: PresLayout = { name: 'screen4x3', width: 9144000, height: 6858000 }
 		const layout16x9: PresLayout = { name: 'screen16x9', width: 9144000, height: 5143500 }
@@ -502,6 +509,11 @@ export default class PptxGenJS implements IPresentationProps {
 			zip.folder('_rels')
 			zip.folder('docProps')
 			zip.folder('ppt').folder('_rels')
+			// add embed fonts
+			this._fonts.forEach((font, idx) => {
+				font.fntDataPath = `fonts/font${idx + 1}.fntdata`
+				zip.file(`ppt/${font.fntDataPath}`, font.fontBlob)
+			})
 			zip.folder('ppt/charts').folder('_rels')
 			zip.folder('ppt/embeddings')
 			zip.folder('ppt/media')
@@ -515,7 +527,9 @@ export default class PptxGenJS implements IPresentationProps {
 			zip.file('_rels/.rels', genXml.makeXmlRootRels())
 			zip.file('docProps/app.xml', genXml.makeXmlApp(this.slides, this.company)) // TODO: pass only `this` like below! 20200206
 			zip.file('docProps/core.xml', genXml.makeXmlCore(this.title, this.subject, this.author, this.revision)) // TODO: pass only `this` like below! 20200206
-			zip.file('ppt/_rels/presentation.xml.rels', genXml.makeXmlPresentationRels(this.slides))
+			zip.file('ppt/_rels/presentation.xml.rels', genXml.makeXmlPresentationRels(this.slides, this.fonts, nFonts => {
+				this._fonts = nFonts
+			}))
 			zip.file('ppt/theme/theme1.xml', genXml.makeXmlTheme(this))
 			zip.file('ppt/presentation.xml', genXml.makeXmlPresentation(this))
 			zip.file('ppt/presProps.xml', genXml.makeXmlPresProps())
@@ -784,5 +798,14 @@ export default class PptxGenJS implements IPresentationProps {
 			options,
 			options?.masterSlideName ? this.slideLayouts.filter(layout => layout._name === options.masterSlideName)[0] : null
 		)
+	}
+
+	/**
+	 * Add an embed font to Presention
+	 * @param {AddFontProps} props - font properties
+	 */
+	addFont (option: AddFontProps): void {
+		console.log('[genjs] addFont', option)
+		this._fonts.push(option)
 	}
 }
