@@ -67,7 +67,7 @@
     "url": "git+https://github.com/MarcoLasticot/PptxGenJS.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "@YOUR-USERNAME:registry": "https://npm.pkg.github.com"
   },
   "keywords": [
     "html-to-powerpoint",
